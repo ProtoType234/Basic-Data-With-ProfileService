@@ -1,0 +1,121 @@
+--// Services
+local Players = game:GetService("Players")
+local ServerScriptService = game:GetService("ServerScriptService")
+local ServerStorage = game:GetService("ServerStorage")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local MarketPlaceService = game:GetService("MarketplaceService")
+--// Path Variables
+local Remotes = ReplicatedStorage.Remotes
+
+--// Modules
+local ProfileService = require(ServerScriptService.Libs.ProfileService)
+local Manager = require(ServerScriptService.PlayerData.Manager)
+local Template = require(ServerScriptService.PlayerData.Template)
+
+--// Data Store
+local ProfileStore = ProfileService.GetProfileStore(
+    "Data7",
+    Template
+)
+
+local function CreateStats(Player: Player)
+    local profile = Manager.Profiles[Player]
+    
+    if not profile then
+        warn("Profile Could Not Load For Player "..Player.UserId)
+        return
+    end
+    
+    local PetsFolder = Instance.new("Folder")
+    PetsFolder.Name = Player.Name
+    PetsFolder.Parent = workspace.Player_Pets
+    
+    local Gamepasses = Instance.new("Folder")
+    Gamepasses.Name = "Gamepasses"
+    Gamepasses.Parent = Player
+    
+    local PetsPlayer = Instance.new("Folder")
+    PetsPlayer.Name = Player.Name
+    PetsPlayer.Parent = workspace.Player_Pets
+
+    for i, v in pairs(ServerStorage.EggHatchingData:GetChildren()) do 
+        v:Clone().Parent = Player
+    end
+    
+    local leaderstats = Instance.new("Folder")
+    leaderstats.Name = "leaderstats"
+    leaderstats.Parent = Player
+
+    local Power = Instance.new("IntValue")
+    Power.Name = "Power"
+    Power.Value = profile.Data.Power
+    Power.Parent = leaderstats
+
+    local Rebirths = Instance.new("IntValue")
+    Rebirths.Name = "Rebirths"
+    Rebirths.Value = profile.Data.Rebirths
+    Rebirths.Parent = Player
+    local Wins = Instance.new("IntValue")
+    Wins.Name = "Wins"
+    Wins.Value = profile.Data.Wins
+    Wins.Parent = Player
+
+    local Gems = Instance.new("IntValue")
+    Gems.Name = "Gems"
+    Gems.Value = profile.Data.Gems
+    Gems.Parent = Player
+
+    for i, gamepass in profile.Data.Gamepasses do
+        local gamepassId = i.Id
+        local GamepassInst = Instance.new("BoolValue")
+        GamepassInst.Name = i
+        GamepassInst.Parent = Gamepasses
+        GamepassInst.Value = i.Value
+        if MarketPlaceService:UserOwnsGamePassAsync(Player.UserId, gamepass.Id) then
+            GamepassInst.Value = true
+        end
+    end
+end
+
+--// Player Added Function
+local function PlayerAdded(player: Player)
+    local profile = ProfileStore:LoadProfileAsync("Player_"..player.UserId)
+    if profile ~= nil then
+        profile:AddUserId(player.UserId)
+        profile:Reconcile()
+        profile:ListenToRelease(function()
+            profile = nil
+            player:Kick()
+        end)
+
+        if player:IsDescendantOf(Players) == true then
+            Manager.Profiles[player] = profile
+            -- DoSomeThingAfterProfileLoaded()
+            CreateStats(player)
+        else
+            profile:Release()
+        end
+    else
+        player:Kick()
+    end
+end
+
+for _, player in ipairs(Players:GetPlayers()) do
+    task.spawn(PlayerAdded, player)
+end
+
+Players.PlayerAdded:Connect(PlayerAdded)
+
+Players.PlayerRemoving:Connect(function(Player)
+    local profile = Manager.Profiles[Player]
+    if profile ~= nil then
+        profile:Release()
+    end
+end)
+
+Remotes.Click.OnServerEvent:Connect(function(player, amount)
+    local profile = Manager.Profiles[player]
+    
+    profile.Data.Power += amount
+    player.leaderstats.Power.Value = profile.Data.Power
+end)
